@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClipGallery, PublicClip } from "@/components/ClipGallery";
+import { ClipGallery, type PublicClip } from "@/components/ClipGallery";
 import { JobStatus } from "@/components/JobStatus";
 import { UploadZone } from "@/components/UploadZone";
 

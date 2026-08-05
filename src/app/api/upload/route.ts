@@ -3,7 +3,6 @@ import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { createJob } from "@/lib/jobs";
-import { UPLOADS_DIR } from "@/lib/paths";
 import { processJob } from "@/lib/video";
 
 export const runtime = "nodejs";
@@ -58,11 +57,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await fs.mkdir(UPLOADS_DIR, { recursive: true });
+    const uploadsDir = path.join(/* turbopackIgnore: true */ process.cwd(), "uploads");
+    await fs.mkdir(uploadsDir, { recursive: true });
 
     const jobId = uuidv4();
     const filename = `${jobId}${extensionFor(file)}`;
-    const dest = path.join(UPLOADS_DIR, filename);
+    const dest = path.join(/* turbopackIgnore: true */ uploadsDir, filename);
     const buffer = Buffer.from(await file.arrayBuffer());
     await fs.writeFile(dest, buffer);
 
