@@ -1,6 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import {
+  ASPECT_RATIOS,
+  type AspectRatioId,
+} from "@/lib/formats";
 
 type UploadZoneProps = {
   disabled?: boolean;
@@ -12,6 +16,7 @@ export function UploadZone({ disabled, onUploaded, onError }: UploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioId>("vertical");
 
   async function handleFile(file: File | undefined) {
     if (!file || disabled || uploading) return;
@@ -25,6 +30,7 @@ export function UploadZone({ disabled, onUploaded, onError }: UploadZoneProps) {
     try {
       const body = new FormData();
       body.append("video", file);
+      body.append("aspectRatio", aspectRatio);
       const res = await fetch("/api/upload", {
         method: "POST",
         body,
@@ -69,11 +75,7 @@ export function UploadZone({ disabled, onUploaded, onError }: UploadZoneProps) {
       }}
     >
       <div className="absolute inset-x-0 top-0 h-1 progress-sheen opacity-80" />
-      <button
-        type="button"
-        className="flex w-full flex-col items-start gap-4 px-7 py-8 text-left md:px-10 md:py-10"
-        onClick={() => inputRef.current?.click()}
-      >
+      <div className="flex w-full flex-col items-start gap-4 px-7 py-8 text-left md:px-10 md:py-10">
         <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--teal)]">
           Drop a long-form video
         </span>
@@ -82,15 +84,57 @@ export function UploadZone({ disabled, onUploaded, onError }: UploadZoneProps) {
         </span>
         <span className="max-w-xl text-base leading-relaxed text-[var(--ink-soft)] md:text-lg">
           MP4, MOV, or WebM up to 500MB. We’ll detect contained moments and cut
-          vertical short-form clips automatically.
+          short-form clips in the frame you choose.
         </span>
-        <span className="mt-2 inline-flex items-center gap-2 rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-semibold text-white transition-transform duration-200 hover:scale-[1.03]">
+
+        <fieldset className="w-full max-w-xl">
+          <legend className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink-soft)]">
+            Output frame
+          </legend>
+          <div
+            className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+            role="radiogroup"
+            aria-label="Output aspect ratio"
+          >
+            {ASPECT_RATIOS.map((option) => {
+              const selected = aspectRatio === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setAspectRatio(option.id)}
+                  className={[
+                    "rounded-2xl border px-3 py-3 text-left transition-all duration-200",
+                    selected
+                      ? "border-[var(--accent)] bg-white shadow-[0_10px_24px_var(--glow)]"
+                      : "border-[var(--line)] bg-white/40 hover:border-[rgba(18,22,28,0.28)]",
+                  ].join(" ")}
+                >
+                  <span className="block text-sm font-semibold text-[var(--ink)]">
+                    {option.label}
+                  </span>
+                  <span className="mt-1 block text-[11px] leading-snug text-[var(--ink-soft)]">
+                    {option.hint}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <button
+          type="button"
+          className="mt-2 inline-flex items-center gap-2 rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-semibold text-white transition-transform duration-200 hover:scale-[1.03]"
+          onClick={() => inputRef.current?.click()}
+        >
           {uploading ? "Uploading" : "Choose video"}
           <span aria-hidden className="text-[var(--accent)]">
             →
           </span>
-        </span>
-      </button>
+        </button>
+      </div>
       <input
         ref={inputRef}
         type="file"

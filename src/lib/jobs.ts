@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { DATA_DIR, JOBS_FILE } from "./paths";
+import type { AspectRatioId } from "./formats";
 
 export type JobStatus =
   | "queued"
@@ -24,6 +25,7 @@ export type Job = {
   id: string;
   originalName: string;
   filename: string;
+  aspectRatio: AspectRatioId;
   status: JobStatus;
   progress: number;
   message: string;
@@ -58,7 +60,7 @@ async function writeStore(store: JobStore): Promise<void> {
 }
 
 export async function createJob(
-  partial: Pick<Job, "id" | "originalName" | "filename">
+  partial: Pick<Job, "id" | "originalName" | "filename" | "aspectRatio">
 ): Promise<Job> {
   const now = new Date().toISOString();
   const job: Job = {

@@ -16,6 +16,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   return NextResponse.json({
     id: job.id,
     originalName: job.originalName,
+    aspectRatio: job.aspectRatio ?? "vertical",
     status: job.status,
     progress: job.progress,
     message: job.message,

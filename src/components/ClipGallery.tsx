@@ -1,6 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import {
+  aspectHint,
+  aspectLabel,
+  previewAspectClass,
+  type AspectRatioId,
+} from "@/lib/formats";
 
 export type PublicClip = {
   id: string;
@@ -17,6 +23,7 @@ export type PublicClip = {
 
 type ClipGalleryProps = {
   clips: PublicClip[];
+  aspectRatio?: AspectRatioId;
 };
 
 function formatDuration(seconds: number): string {
@@ -26,9 +33,19 @@ function formatDuration(seconds: number): string {
   return m > 0 ? `${m}m ${r}s` : `${r}s`;
 }
 
-export function ClipGallery({ clips }: ClipGalleryProps) {
+export function ClipGallery({
+  clips,
+  aspectRatio = "vertical",
+}: ClipGalleryProps) {
   const [activeId, setActiveId] = useState<string | null>(clips[0]?.id ?? null);
   const active = clips.find((c) => c.id === activeId) ?? clips[0];
+  const frameClass = previewAspectClass(aspectRatio);
+  const previewMax =
+    aspectRatio === "landscape" || aspectRatio === "original"
+      ? "max-w-[560px]"
+      : aspectRatio === "square"
+        ? "max-w-[420px]"
+        : "max-w-[340px]";
 
   if (!clips.length) return null;
 
@@ -37,25 +54,24 @@ export function ClipGallery({ clips }: ClipGalleryProps) {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--teal)]">
-            Short-form output
+            {aspectLabel(aspectRatio)} output
           </p>
           <h2 className="brand-mark mt-2 text-3xl md:text-4xl">
             {clips.length} contained clip{clips.length === 1 ? "" : "s"}
           </h2>
         </div>
         <p className="max-w-md text-sm leading-relaxed text-[var(--ink-soft)]">
-          Vertical 9:16 cuts, centered from your source. Preview, then download
-          for Reels, Shorts, or TikTok.
+          {aspectHint(aspectRatio)}. Preview, then download each cut.
         </p>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,340px)_1fr]">
-        <div className="relative mx-auto w-full max-w-[340px]">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_1fr]">
+        <div className={`relative mx-auto w-full ${previewMax}`}>
           <div className="overflow-hidden rounded-[32px] bg-[var(--ink)] shadow-[0_30px_80px_rgba(18,22,28,0.28)]">
             {active ? (
               <video
                 key={active.id}
-                className="aspect-[9/16] w-full object-cover"
+                className={`${frameClass} w-full object-cover`}
                 src={active.url}
                 poster={active.thumbnailUrl}
                 controls
@@ -88,7 +104,14 @@ export function ClipGallery({ clips }: ClipGalleryProps) {
                   <img
                     src={clip.thumbnailUrl}
                     alt=""
-                    className="h-24 w-16 shrink-0 rounded-xl object-cover"
+                    className={[
+                      "shrink-0 rounded-xl object-cover",
+                      aspectRatio === "vertical"
+                        ? "h-24 w-16"
+                        : aspectRatio === "square"
+                          ? "h-20 w-20"
+                          : "h-20 w-32",
+                    ].join(" ")}
                   />
                   <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
                     <div>

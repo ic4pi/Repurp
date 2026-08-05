@@ -3,6 +3,7 @@ import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { createJob } from "@/lib/jobs";
+import { isAspectRatioId, type AspectRatioId } from "@/lib/formats";
 import { processJob } from "@/lib/video";
 
 export const runtime = "nodejs";
@@ -31,6 +32,10 @@ export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
     const file = form.get("video");
+    const aspectRaw = form.get("aspectRatio");
+    const aspectRatio: AspectRatioId = isAspectRatioId(aspectRaw)
+      ? aspectRaw
+      : "vertical";
 
     if (!(file instanceof File)) {
       return NextResponse.json(
@@ -70,6 +75,7 @@ export async function POST(req: NextRequest) {
       id: jobId,
       originalName: file.name,
       filename,
+      aspectRatio,
     });
 
     // Fire-and-forget processing on the Node server.
@@ -79,6 +85,7 @@ export async function POST(req: NextRequest) {
       jobId: job.id,
       status: job.status,
       message: job.message,
+      aspectRatio: job.aspectRatio,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Upload failed.";

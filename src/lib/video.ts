@@ -3,7 +3,12 @@ import { promises as fs } from "fs";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
 import { CLIPS_DIR, UPLOADS_DIR } from "./paths";
-import { Clip, updateJob } from "./jobs";
+import { Clip, getJob, updateJob } from "./jobs";
+import {
+  aspectLabel,
+  buildVideoFilter,
+  type AspectRatioId,
+} from "./formats";
 
 type Probe = {
   duration: number;
@@ -212,23 +217,11 @@ async function exportClip(
   start: number,
   end: number,
   sourceWidth: number,
-  sourceHeight: number
+  sourceHeight: number,
+  aspectRatio: AspectRatioId
 ): Promise<void> {
   const duration = Math.max(0.5, end - start);
-  const targetAspect = 9 / 16;
-  const sourceAspect = sourceWidth / sourceHeight;
-
-  // Center-crop to 9:16 for short-form platforms, then scale to 1080x1920.
-  let cropFilter: string;
-  if (sourceAspect > targetAspect) {
-    const newWidth = Math.floor(sourceHeight * targetAspect);
-    const x = Math.floor((sourceWidth - newWidth) / 2);
-    cropFilter = `crop=${newWidth}:${sourceHeight}:${x}:0,scale=1080:1920`;
-  } else {
-    const newHeight = Math.floor(sourceWidth / targetAspect);
-    const y = Math.floor((sourceHeight - newHeight) / 2);
-    cropFilter = `crop=${sourceWidth}:${newHeight}:0:${y},scale=1080:1920`;
-  }
+  const vf = buildVideoFilter(aspectRatio, sourceWidth, sourceHeight);
 
   const { code, stderr } = await run("ffmpeg", [
     "-y",
@@ -239,7 +232,7 @@ async function exportClip(
     "-t",
     duration.toFixed(3),
     "-vf",
-    `${cropFilter},fps=30`,
+    vf,
     "-c:v",
     "libx264",
     "-preset",
@@ -294,6 +287,9 @@ export async function processJob(jobId: string, filename: string): Promise<void>
   await fs.mkdir(UPLOADS_DIR, { recursive: true });
 
   try {
+    const existing = await getJob(jobId);
+    const aspectRatio: AspectRatioId = existing?.aspectRatio ?? "vertical";
+
     await updateJob(jobId, {
       status: "analyzing",
       progress: 8,
@@ -315,7 +311,7 @@ export async function processJob(jobId: string, filename: string): Promise<void>
     await updateJob(jobId, {
       status: "cutting",
       progress: 30,
-      message: `Cutting ${segments.length} short-form clip${segments.length === 1 ? "" : "s"}…`,
+      message: `Cutting ${segments.length} ${aspectLabel(aspectRatio).toLowerCase()} clip${segments.length === 1 ? "" : "s"}…`,
     });
 
     const clips: Clip[] = [];
@@ -333,7 +329,8 @@ export async function processJob(jobId: string, filename: string): Promise<void>
         seg.start,
         seg.end,
         probe.width,
-        probe.height
+        probe.height,
+        aspectRatio
       );
       await exportThumbnail(clipPath, thumbPath);
 
@@ -360,7 +357,7 @@ export async function processJob(jobId: string, filename: string): Promise<void>
       status: "complete",
       progress: 100,
       clips,
-      message: `Ready — ${clips.length} short-form clip${clips.length === 1 ? "" : "s"} from your upload.`,
+      message: `Ready — ${clips.length} ${aspectLabel(aspectRatio).toLowerCase()} clip${clips.length === 1 ? "" : "s"} from your upload.`,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Processing failed.";

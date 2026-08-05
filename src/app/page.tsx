@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { ClipGallery, type PublicClip } from "@/components/ClipGallery";
 import { JobStatus } from "@/components/JobStatus";
 import { UploadZone } from "@/components/UploadZone";
+import type { AspectRatioId } from "@/lib/formats";
 
 type JobResponse = {
   id: string;
   originalName: string;
+  aspectRatio?: AspectRatioId;
   status: string;
   progress: number;
   message: string;
@@ -116,7 +118,12 @@ export default function HomePage() {
           {job.error ? (
             <p className="text-sm text-[var(--accent-deep)]">{job.error}</p>
           ) : null}
-          {job.status === "complete" ? <ClipGallery clips={job.clips} /> : null}
+          {job.status === "complete" ? (
+            <ClipGallery
+              clips={job.clips}
+              aspectRatio={job.aspectRatio ?? "vertical"}
+            />
+          ) : null}
           {job.status === "complete" || job.status === "failed" ? (
             <button
               type="button"
@@ -146,7 +153,7 @@ export default function HomePage() {
             },
             {
               title: "Frame",
-              copy: "Each clip is center-cropped to 9:16 so it feels native on mobile.",
+              copy: "Choose vertical, square, landscape, or original framing before you upload.",
             },
           ].map((item) => (
             <div key={item.title}>
