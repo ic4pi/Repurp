@@ -527,7 +527,9 @@ export async function processVideoInBrowser(
   onProgress({
     status: "complete",
     progress: 100,
-    message: `Ready — ${clips.length} clip${clips.length === 1 ? "" : "s"} via ${engine}.`,
+    message: usedSpeechEditing
+      ? `Ready — ${clips.length} topic clip${clips.length === 1 ? "" : "s"} from your video.`
+      : `Ready — ${clips.length} clip${clips.length === 1 ? "" : "s"} from visual scene cuts.`,
     clips,
   });
 
