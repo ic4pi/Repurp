@@ -183,7 +183,7 @@ async function extractAudioMp3(
     audioName,
   ]);
   if (code !== 0) {
-    throw new Error("Could not rip audio from the video for transcription.");
+    throw new Error("Could not prepare audio from this video.");
   }
   const data = toU8(await ffmpeg.readFile(audioName));
   await safeDelete(ffmpeg, audioName);
