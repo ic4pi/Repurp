@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { ClipGallery, type PublicClip } from "@/components/ClipGallery";
 import { JobStatus } from "@/components/JobStatus";
 import { UploadZone } from "@/components/UploadZone";
+import { revokeClips, type ClientClip } from "@/lib/client-ffmpeg";
 import type { AspectRatioId } from "@/lib/formats";
 
-type JobResponse = {
-  id: string;
+type JobState = {
   originalName: string;
-  aspectRatio?: AspectRatioId;
+  aspectRatio: AspectRatioId;
   status: string;
   progress: number;
   message: string;
@@ -17,52 +17,44 @@ type JobResponse = {
   clips: PublicClip[];
 };
 
+function toPublicClips(clips: ClientClip[]): PublicClip[] {
+  return clips.map((clip) => ({
+    ...clip,
+    thumbnail: clip.filename.replace(/\.mp4$/i, ".jpg"),
+  }));
+}
+
 export default function HomePage() {
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [job, setJob] = useState<JobResponse | null>(null);
+  const [job, setJob] = useState<JobState | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!jobId) return;
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
-        const data = (await res.json()) as JobResponse & { error?: string };
-        if (!res.ok) {
-          throw new Error(data.error || "Could not load job.");
-        }
-        if (cancelled) return;
-        setJob(data);
-        if (data.status !== "complete" && data.status !== "failed") {
-          timer = setTimeout(() => void poll(), 1200);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Polling failed.");
-        }
+    return () => {
+      if (job?.clips.length) {
+        revokeClips(job.clips);
       }
     };
-
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [jobId]);
+    // Only revoke on unmount of the current job blobs via reset handler below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const busy =
     !!job && job.status !== "complete" && job.status !== "failed";
+
+  function reset() {
+    if (job?.clips.length) {
+      revokeClips(job.clips);
+    }
+    setJob(null);
+    setError("");
+  }
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-8 md:px-8 md:pt-12">
       <header className="animate-rise flex items-center justify-between gap-4">
         <p className="brand-mark text-2xl text-[var(--ink)] md:text-3xl">repurp</p>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink-soft)]">
-          Long → short
+          Long → short · in-browser
         </p>
       </header>
 
@@ -75,7 +67,7 @@ export default function HomePage() {
           <div className="absolute bottom-8 left-7 right-7">
             <p className="brand-mark text-5xl text-white">repurp</p>
             <p className="mt-3 text-sm text-white/80">
-              Contained clips, vertical-ready.
+              Contained clips, cut on-device.
             </p>
           </div>
         </div>
@@ -85,16 +77,34 @@ export default function HomePage() {
             repurp
           </h1>
           <p className="animate-rise-delay mt-5 max-w-lg text-lg leading-relaxed text-[var(--ink-soft)] md:text-xl">
-            Upload one video. Get short-form clips cut from the moments already
-            inside it.
+            Choose a video. Your browser detects moments and cuts short-form
+            clips — no server upload required.
           </p>
           <div className="animate-rise-delay-2 mt-8">
             <UploadZone
               disabled={busy}
-              onUploaded={(id) => {
-                setError("");
-                setJob(null);
-                setJobId(id);
+              onProgress={(update) => {
+                setJob((prev) => ({
+                  originalName: update.originalName,
+                  aspectRatio: update.aspectRatio,
+                  status: update.status,
+                  progress: update.progress,
+                  message: update.message,
+                  error: update.error,
+                  clips: update.clips
+                    ? toPublicClips(update.clips)
+                    : prev?.clips ?? [],
+                }));
+              }}
+              onComplete={({ originalName, aspectRatio, clips }) => {
+                setJob({
+                  originalName,
+                  aspectRatio,
+                  status: "complete",
+                  progress: 100,
+                  message: `Ready — ${clips.length} clip${clips.length === 1 ? "" : "s"} (processed in your browser).`,
+                  clips: toPublicClips(clips),
+                });
               }}
               onError={setError}
             />
@@ -128,11 +138,7 @@ export default function HomePage() {
             <button
               type="button"
               className="text-sm font-semibold text-[var(--ink)] underline-offset-4 hover:underline"
-              onClick={() => {
-                setJobId(null);
-                setJob(null);
-                setError("");
-              }}
+              onClick={reset}
             >
               Start another upload
             </button>
@@ -149,11 +155,11 @@ export default function HomePage() {
             },
             {
               title: "Cut",
-              copy: "Repurp merges beats into short clips sized for social (≈8–45s).",
+              copy: "Clips are rendered locally with ffmpeg.wasm (≈5–45s each).",
             },
             {
               title: "Frame",
-              copy: "Choose vertical, square, landscape, or original framing before you upload.",
+              copy: "Choose vertical, square, landscape, or original framing before you start.",
             },
           ].map((item) => (
             <div key={item.title}>

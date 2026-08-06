@@ -5,45 +5,74 @@ import {
   ASPECT_RATIOS,
   type AspectRatioId,
 } from "@/lib/formats";
+import {
+  MAX_BROWSER_BYTES,
+  processVideoInBrowser,
+  type ClientClip,
+  type ProgressUpdate,
+} from "@/lib/client-ffmpeg";
 
 type UploadZoneProps = {
   disabled?: boolean;
-  onUploaded: (jobId: string) => void;
+  onProgress: (update: ProgressUpdate & { originalName: string; aspectRatio: AspectRatioId }) => void;
+  onComplete: (payload: {
+    originalName: string;
+    aspectRatio: AspectRatioId;
+    clips: ClientClip[];
+  }) => void;
   onError: (message: string) => void;
 };
 
-export function UploadZone({ disabled, onUploaded, onError }: UploadZoneProps) {
+export function UploadZone({
+  disabled,
+  onProgress,
+  onComplete,
+  onError,
+}: UploadZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [working, setWorking] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatioId>("vertical");
 
   async function handleFile(file: File | undefined) {
-    if (!file || disabled || uploading) return;
+    if (!file || disabled || working) return;
     if (!file.type.startsWith("video/")) {
       onError("Please choose a video file.");
       return;
     }
+    if (file.size > MAX_BROWSER_BYTES) {
+      onError("Keep files under 200MB for in-browser processing.");
+      return;
+    }
 
-    setUploading(true);
+    setWorking(true);
     onError("");
     try {
-      const body = new FormData();
-      body.append("video", file);
-      body.append("aspectRatio", aspectRatio);
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body,
+      const clips = await processVideoInBrowser(file, aspectRatio, (update) => {
+        onProgress({
+          ...update,
+          originalName: file.name,
+          aspectRatio,
+        });
       });
-      const data = (await res.json()) as { jobId?: string; error?: string };
-      if (!res.ok || !data.jobId) {
-        throw new Error(data.error || "Upload failed.");
-      }
-      onUploaded(data.jobId);
+      onComplete({
+        originalName: file.name,
+        aspectRatio,
+        clips,
+      });
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Upload failed.");
+      const message = err instanceof Error ? err.message : "Processing failed.";
+      onProgress({
+        status: "failed",
+        progress: 100,
+        message: "Something went wrong while repurposing this video.",
+        error: message,
+        originalName: file.name,
+        aspectRatio,
+      });
+      onError(message);
     } finally {
-      setUploading(false);
+      setWorking(false);
       setDragging(false);
     }
   }
@@ -55,7 +84,7 @@ export function UploadZone({ disabled, onUploaded, onError }: UploadZoneProps) {
         dragging
           ? "bg-[rgba(255,90,31,0.08)] scale-[1.01] shadow-[0_20px_60px_var(--glow)]"
           : "bg-white/55 backdrop-blur-md shadow-[0_18px_50px_rgba(18,22,28,0.08)]",
-        disabled || uploading ? "opacity-70 pointer-events-none" : "",
+        disabled || working ? "opacity-70 pointer-events-none" : "",
       ].join(" ")}
       onDragEnter={(e) => {
         e.preventDefault();
@@ -77,14 +106,14 @@ export function UploadZone({ disabled, onUploaded, onError }: UploadZoneProps) {
       <div className="absolute inset-x-0 top-0 h-1 progress-sheen opacity-80" />
       <div className="flex w-full flex-col items-start gap-4 px-7 py-8 text-left md:px-10 md:py-10">
         <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--teal)]">
-          Drop a long-form video
+          Process in your browser
         </span>
         <span className="brand-mark max-w-[14ch] text-4xl text-[var(--ink)] md:text-5xl">
-          {uploading ? "Sending…" : "Upload & repurp"}
+          {working ? "Repurping…" : "Upload & repurp"}
         </span>
         <span className="max-w-xl text-base leading-relaxed text-[var(--ink-soft)] md:text-lg">
-          MP4, MOV, or WebM up to 500MB. We’ll detect contained moments and cut
-          short-form clips in the frame you choose.
+          MP4, MOV, or WebM up to 200MB. Cutting runs locally with ffmpeg.wasm —
+          nothing is uploaded to a server.
         </span>
 
         <fieldset className="w-full max-w-xl">
@@ -129,7 +158,7 @@ export function UploadZone({ disabled, onUploaded, onError }: UploadZoneProps) {
           className="mt-2 inline-flex items-center gap-2 rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-semibold text-white transition-transform duration-200 hover:scale-[1.03]"
           onClick={() => inputRef.current?.click()}
         >
-          {uploading ? "Uploading" : "Choose video"}
+          {working ? "Working" : "Choose video"}
           <span aria-hidden className="text-[var(--accent)]">
             →
           </span>
