@@ -14,10 +14,7 @@ type Body = {
   cues?: TranscriptCue[];
 };
 
-/**
- * Claude Sonnet 3.5 (OpenRouter) picks self-contained clip boundaries
- * from a timestamped transcript. No media upload on this route.
- */
+/** Picks self-contained clip boundaries from a timestamped transcript. */
 export async function POST(req: NextRequest) {
   try {
     const apiKey = requireOpenRouterKey();
@@ -34,20 +31,20 @@ export async function POST(req: NextRequest) {
 
     if (!cues.length) {
       return NextResponse.json(
-        { error: "No transcript cues available for Claude segmentation." },
+        { error: "No speech moments available to select clips." },
         { status: 400 }
       );
     }
 
     const segments = await chooseClipsWithClaude(apiKey, duration, cues);
 
-    return NextResponse.json({
-      engine: "openrouter-claude-3.5-sonnet",
-      segments,
-    });
+    return NextResponse.json({ segments });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Analyze failed.";
-    const status = message.includes("OPENROUTER_API_KEY") ? 503 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const raw = err instanceof Error ? err.message : "Processing failed.";
+    const status = /api_key|OPENROUTER/i.test(raw) ? 503 : 500;
+    return NextResponse.json(
+      { error: "Could not choose clip moments. Try again." },
+      { status }
+    );
   }
 }

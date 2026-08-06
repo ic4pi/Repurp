@@ -248,7 +248,10 @@ async function resolveSegmentsWithLlm(
     onProgress({
       status: "transcribing",
       progress: 18 + Math.round(((i + 0.5) / chunkCount) * 22),
-      message: `Transcribing ripped audio ${i + 1}/${chunkCount}…`,
+      message:
+        chunkCount > 1
+          ? `Listening to your video (${i + 1}/${chunkCount})…`
+          : "Listening to your video…",
     });
 
     let chunkBytes =
@@ -292,7 +295,7 @@ async function resolveSegmentsWithLlm(
 
     if (!res.ok) {
       if (res.status === 503) return null;
-      throw new Error(data.error || "Transcription failed.");
+      throw new Error(data.error || "Could not process this video.");
     }
 
     cues.push(...(data.cues ?? []));
@@ -305,7 +308,7 @@ async function resolveSegmentsWithLlm(
   onProgress({
     status: "editing",
     progress: 45,
-    message: "Choosing self-contained topic clips…",
+    message: "Picking the strongest moments…",
   });
 
   const segmentRes = await fetch("/api/analyze", {
@@ -324,7 +327,7 @@ async function resolveSegmentsWithLlm(
 
   if (!segmentRes.ok) {
     if (segmentRes.status === 503) return null;
-    throw new Error(segmentData.error || "Topic segmentation failed.");
+    throw new Error(segmentData.error || "Could not choose clip moments.");
   }
 
   return segmentData.segments ?? null;
@@ -339,7 +342,7 @@ async function resolveVisualSegments(
   onProgress({
     status: "analyzing",
     progress: 24,
-    message: "Falling back to visual scene detection…",
+    message: "Finding natural cuts…",
   });
 
   const logBuffer: string[] = [];
@@ -371,7 +374,7 @@ export async function processVideoInBrowser(
   onProgress: (update: ProgressUpdate) => void
 ): Promise<ClientClip[]> {
   if (file.size > MAX_BROWSER_BYTES) {
-    throw new Error("For browser processing, keep uploads under 200MB.");
+    throw new Error("Keep uploads under 200MB.");
   }
 
   const { fetchFile } = await import("@ffmpeg/util");
@@ -397,7 +400,6 @@ export async function processVideoInBrowser(
   await ffmpeg.writeFile(inputName, await fetchFile(file));
 
   let segments: Segment[] | null = null;
-  let usedSpeechEditing = false;
 
   try {
     segments = await resolveSegmentsWithLlm(
@@ -406,15 +408,11 @@ export async function processVideoInBrowser(
       probe.duration,
       onProgress
     );
-    if (segments?.length) {
-      usedSpeechEditing = true;
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Topic segmentation failed.";
+  } catch {
     onProgress({
       status: "analyzing",
       progress: 22,
-      message: `${message} Using visual fallback…`,
+      message: "Finding natural cuts…",
     });
   }
 
@@ -425,7 +423,6 @@ export async function processVideoInBrowser(
       probe.duration,
       onProgress
     );
-    usedSpeechEditing = false;
   }
 
   onProgress({
@@ -527,9 +524,7 @@ export async function processVideoInBrowser(
   onProgress({
     status: "complete",
     progress: 100,
-    message: usedSpeechEditing
-      ? `Ready — ${clips.length} topic clip${clips.length === 1 ? "" : "s"} from your video.`
-      : `Ready — ${clips.length} clip${clips.length === 1 ? "" : "s"} from visual scene cuts.`,
+    message: `Ready — ${clips.length} clip${clips.length === 1 ? "" : "s"}.`,
     clips,
   });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { ClipGallery, type PublicClip } from "@/components/ClipGallery";
 import { JobStatus } from "@/components/JobStatus";
 import { UploadZone } from "@/components/UploadZone";
@@ -34,7 +35,6 @@ export default function HomePage() {
         revokeClips(job.clips);
       }
     };
-    // Only revoke on unmount of the current job blobs via reset handler below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -52,7 +52,7 @@ export default function HomePage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-8 md:px-8 md:pt-12">
       <header className="animate-rise flex items-center justify-between gap-4">
-        <p className="brand-mark text-2xl text-[var(--ink)] md:text-3xl">repurp</p>
+        <BrandMark className="text-2xl text-[var(--ink)] md:text-3xl" as="p" />
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink-soft)]">
           Long → short
         </p>
@@ -65,17 +65,18 @@ export default function HomePage() {
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.22),transparent_45%)]" />
           <div className="absolute bottom-8 left-7 right-7">
-            <p className="brand-mark text-5xl text-white">repurp</p>
+            <BrandMark className="text-5xl text-white" as="p" />
             <p className="mt-3 text-sm text-white/80">
-              Contained clips, cut on-device.
+              Contained clips, ready to post.
             </p>
           </div>
         </div>
 
         <div className="max-w-2xl">
-          <h1 className="brand-mark animate-rise text-[clamp(3.4rem,10vw,6.4rem)] text-[var(--ink)]">
-            repurp
-          </h1>
+          <BrandMark
+            as="h1"
+            className="animate-rise text-[clamp(3.4rem,10vw,6.4rem)] text-[var(--ink)]"
+          />
           <p className="animate-rise-delay mt-5 max-w-lg text-lg leading-relaxed text-[var(--ink-soft)] md:text-xl">
             Choose a video. We find the strongest moments and turn them into
             short-form clips.

@@ -7,6 +7,27 @@ type JobStatusProps = {
   originalName?: string;
 };
 
+function statusLabel(status: string): string {
+  switch (status) {
+    case "loading":
+      return "preparing";
+    case "analyzing":
+      return "reviewing";
+    case "transcribing":
+      return "listening";
+    case "editing":
+      return "selecting";
+    case "cutting":
+      return "cutting";
+    case "complete":
+      return "complete";
+    case "failed":
+      return "failed";
+    default:
+      return status;
+  }
+}
+
 export function JobStatus({
   status,
   progress,
@@ -20,10 +41,19 @@ export function JobStatus({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--ink-soft)]">
-            {status}
+            {statusLabel(status)}
           </p>
           <h2 className="brand-mark mt-2 text-3xl text-[var(--ink)] md:text-4xl">
-            {active ? "Repurposing" : status === "complete" ? "Clips ready" : "Failed"}
+            {active ? (
+              <>
+                <span className="normal-case">re</span>
+                <span className="uppercase">PERPing</span>
+              </>
+            ) : status === "complete" ? (
+              "Clips ready"
+            ) : (
+              "Failed"
+            )}
           </h2>
           {originalName ? (
             <p className="mt-2 text-sm text-[var(--ink-soft)]">{originalName}</p>

@@ -15,9 +15,9 @@ const figtree = Figtree({
 });
 
 export const metadata: Metadata = {
-  title: "repurp — short-form from long-form",
+  title: "rePERP — short-form from long-form",
   description:
-    "Upload a video. Repurp finds contained moments and cuts them into short-form clips ready for Reels, Shorts, and TikTok.",
+    "Upload a video. rePERP finds the strongest moments and turns them into short-form clips.",
 };
 
 export default function RootLayout({

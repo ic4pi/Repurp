@@ -11,6 +11,7 @@ import {
   type ClientClip,
   type ProgressUpdate,
 } from "@/lib/client-ffmpeg";
+import { sanitizeUserError } from "@/lib/user-facing";
 
 type UploadZoneProps = {
   disabled?: boolean;
@@ -61,11 +62,13 @@ export function UploadZone({
         clips,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Processing failed.";
+      const message = sanitizeUserError(
+        err instanceof Error ? err.message : "Processing failed."
+      );
       onProgress({
         status: "failed",
         progress: 100,
-        message: "Something went wrong while repurposing this video.",
+        message: "Something went wrong while processing this video.",
         error: message,
         originalName: file.name,
         aspectRatio,
@@ -108,8 +111,19 @@ export function UploadZone({
         <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--teal)]">
           Drop a long-form video
         </span>
-        <span className="brand-mark max-w-[14ch] text-4xl text-[var(--ink)] md:text-5xl">
-          {working ? "Repurping…" : "Upload & repurp"}
+        <span className="brand-mark max-w-[18ch] text-4xl text-[var(--ink)] md:text-5xl">
+          {working ? (
+            <>
+              <span className="normal-case">re</span>
+              <span className="uppercase">PERPing</span>…
+            </>
+          ) : (
+            <>
+              Upload &amp;{" "}
+              <span className="normal-case">re</span>
+              <span className="uppercase">PERP</span>
+            </>
+          )}
         </span>
         <span className="max-w-xl text-base leading-relaxed text-[var(--ink-soft)] md:text-lg">
           MP4, MOV, or WebM up to 200MB. We’ll find complete moments and cut
