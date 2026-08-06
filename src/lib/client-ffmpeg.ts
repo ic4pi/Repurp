@@ -5,10 +5,13 @@ import {
   buildVideoFilter,
   type AspectRatioId,
 } from "@/lib/formats";
-import { buildSegments, formatTime } from "@/lib/segments";
+import { buildSegments, formatTime, type Segment } from "@/lib/segments";
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 
 export const MAX_BROWSER_BYTES = 200 * 1024 * 1024;
+const AUDIO_CHUNK_SECONDS = 90;
+/** Keep each STT request comfortably under common serverless body limits. */
+const MAX_AUDIO_CHUNK_BYTES = 2.5 * 1024 * 1024;
 
 export type ClientClip = {
   id: string;
@@ -23,7 +26,14 @@ export type ClientClip = {
 };
 
 export type ProgressUpdate = {
-  status: "loading" | "analyzing" | "cutting" | "complete" | "failed";
+  status:
+    | "loading"
+    | "analyzing"
+    | "transcribing"
+    | "editing"
+    | "cutting"
+    | "complete"
+    | "failed";
   progress: number;
   message: string;
   clips?: ClientClip[];
@@ -34,6 +44,12 @@ type Probe = {
   duration: number;
   width: number;
   height: number;
+};
+
+type TranscriptCue = {
+  start: number;
+  end: number;
+  text: string;
 };
 
 let ffmpegSingleton: FFmpeg | null = null;
@@ -55,7 +71,6 @@ async function getFFmpeg(
   if (!loadPromise) {
     loadPromise = (async () => {
       const ffmpeg = new FFmpeg();
-      // Pin a known-good core build for Next/Vercel.
       const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
       await ffmpeg.load({
         coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
@@ -147,6 +162,219 @@ function toU8(data: Uint8Array | string): Uint8Array {
   return data;
 }
 
+function u8ToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+async function extractAudioMp3(
+  ffmpeg: FFmpeg,
+  inputName: string
+): Promise<Uint8Array> {
+  const audioName = "audio-full.mp3";
+  await safeDelete(ffmpeg, audioName);
+  const code = await ffmpeg.exec([
+    "-y",
+    "-i",
+    inputName,
+    "-vn",
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    "-b:a",
+    "48k",
+    audioName,
+  ]);
+  if (code !== 0) {
+    throw new Error("Could not extract audio for transcription.");
+  }
+  const data = toU8(await ffmpeg.readFile(audioName));
+  await safeDelete(ffmpeg, audioName);
+  return data;
+}
+
+async function sliceAudioChunk(
+  ffmpeg: FFmpeg,
+  inputName: string,
+  start: number,
+  duration: number,
+  outName: string
+): Promise<Uint8Array> {
+  await safeDelete(ffmpeg, outName);
+  const code = await ffmpeg.exec([
+    "-y",
+    "-ss",
+    start.toFixed(3),
+    "-i",
+    inputName,
+    "-t",
+    duration.toFixed(3),
+    "-vn",
+    "-ac",
+    "1",
+    "-ar",
+    "16000",
+    "-b:a",
+    "48k",
+    outName,
+  ]);
+  if (code !== 0) {
+    throw new Error("Could not slice audio chunk.");
+  }
+  const data = toU8(await ffmpeg.readFile(outName));
+  await safeDelete(ffmpeg, outName);
+  return data;
+}
+
+async function resolveSegmentsWithOpenRouter(
+  ffmpeg: FFmpeg,
+  inputName: string,
+  duration: number,
+  onProgress: (update: ProgressUpdate) => void
+): Promise<Segment[] | null> {
+  onProgress({
+    status: "transcribing",
+    progress: 18,
+    message: "Extracting audio for speech transcription…",
+  });
+
+  const fullAudio = await extractAudioMp3(ffmpeg, inputName);
+  const cues: TranscriptCue[] = [];
+
+  // Prefer chunked STT so each request stays small for Vercel.
+  const chunkCount = Math.max(1, Math.ceil(duration / AUDIO_CHUNK_SECONDS));
+
+  for (let i = 0; i < chunkCount; i++) {
+    const start = i * AUDIO_CHUNK_SECONDS;
+    const len = Math.min(AUDIO_CHUNK_SECONDS, duration - start);
+    if (len < 0.8) continue;
+
+    onProgress({
+      status: "transcribing",
+      progress: 18 + Math.round(((i + 0.5) / chunkCount) * 22),
+      message: `Transcribing speech ${i + 1}/${chunkCount} via OpenRouter Whisper…`,
+    });
+
+    let chunkBytes =
+      chunkCount === 1
+        ? fullAudio
+        : await sliceAudioChunk(
+            ffmpeg,
+            inputName,
+            start,
+            len,
+            `audio-chunk-${i}.mp3`
+          );
+
+    if (chunkBytes.byteLength > MAX_AUDIO_CHUNK_BYTES) {
+      // Re-encode even smaller if a chunk is still heavy.
+      chunkBytes = await sliceAudioChunk(
+        ffmpeg,
+        inputName,
+        start,
+        len,
+        `audio-chunk-${i}-tiny.mp3`
+      );
+    }
+
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "transcribe",
+        duration,
+        timeOffset: start,
+        audioBase64: u8ToBase64(chunkBytes),
+        audioFormat: "mp3",
+      }),
+    });
+
+    const data = (await res.json()) as {
+      error?: string;
+      cues?: TranscriptCue[];
+    };
+
+    if (!res.ok) {
+      if (res.status === 503) return null;
+      throw new Error(data.error || "Transcription failed.");
+    }
+
+    cues.push(...(data.cues ?? []));
+  }
+
+  if (!cues.length) {
+    return null;
+  }
+
+  onProgress({
+    status: "editing",
+    progress: 45,
+    message: "Claude Sonnet 3.5 choosing self-contained topic clips…",
+  });
+
+  const segmentRes = await fetch("/api/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: "segment",
+      duration,
+      cues,
+    }),
+  });
+
+  const segmentData = (await segmentRes.json()) as {
+    error?: string;
+    segments?: Segment[];
+  };
+
+  if (!segmentRes.ok) {
+    if (segmentRes.status === 503) return null;
+    throw new Error(segmentData.error || "Claude segmentation failed.");
+  }
+
+  return segmentData.segments ?? null;
+}
+
+async function resolveVisualSegments(
+  ffmpeg: FFmpeg,
+  inputName: string,
+  duration: number,
+  onProgress: (update: ProgressUpdate) => void
+): Promise<Segment[]> {
+  onProgress({
+    status: "analyzing",
+    progress: 24,
+    message: "Falling back to visual scene detection…",
+  });
+
+  const logBuffer: string[] = [];
+  const logHandler = ({ message }: { message: string }) => {
+    logBuffer.push(message);
+  };
+  ffmpeg.on("log", logHandler);
+  try {
+    await ffmpeg.exec([
+      "-hide_banner",
+      "-i",
+      inputName,
+      "-filter:v",
+      "select='gt(scene,0.28)',showinfo",
+      "-f",
+      "null",
+      "-",
+    ]);
+  } finally {
+    ffmpeg.off("log", logHandler);
+  }
+
+  return buildSegments(duration, parseSceneCuts(logBuffer));
+}
+
 export async function processVideoInBrowser(
   file: File,
   aspectRatio: AspectRatioId,
@@ -158,7 +386,6 @@ export async function processVideoInBrowser(
 
   const { fetchFile } = await import("@ffmpeg/util");
   const clips: ClientClip[] = [];
-  const logBuffer: string[] = [];
 
   onProgress({
     status: "loading",
@@ -166,9 +393,7 @@ export async function processVideoInBrowser(
     message: "Loading ffmpeg.wasm in your browser…",
   });
 
-  const ffmpeg = await getFFmpeg((message) => {
-    logBuffer.push(message);
-  });
+  const ffmpeg = await getFFmpeg();
 
   onProgress({
     status: "analyzing",
@@ -181,30 +406,41 @@ export async function processVideoInBrowser(
   await safeDelete(ffmpeg, inputName);
   await ffmpeg.writeFile(inputName, await fetchFile(file));
 
-  onProgress({
-    status: "analyzing",
-    progress: 22,
-    message: "Detecting scene changes…",
-  });
+  let segments: Segment[] | null = null;
+  let engine = "visual-scenes";
 
-  logBuffer.length = 0;
-  await ffmpeg.exec([
-    "-hide_banner",
-    "-i",
-    inputName,
-    "-filter:v",
-    "select='gt(scene,0.28)',showinfo",
-    "-f",
-    "null",
-    "-",
-  ]);
+  try {
+    segments = await resolveSegmentsWithOpenRouter(
+      ffmpeg,
+      inputName,
+      probe.duration,
+      onProgress
+    );
+    if (segments?.length) {
+      engine = "claude-sonnet-3.5";
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "LLM segmentation failed.";
+    onProgress({
+      status: "analyzing",
+      progress: 22,
+      message: `${message} Using visual fallback…`,
+    });
+  }
 
-  const cuts = parseSceneCuts(logBuffer);
-  const segments = buildSegments(probe.duration, cuts);
+  if (!segments?.length) {
+    segments = await resolveVisualSegments(
+      ffmpeg,
+      inputName,
+      probe.duration,
+      onProgress
+    );
+    engine = "visual-scenes";
+  }
 
   onProgress({
     status: "cutting",
-    progress: 30,
+    progress: 55,
     message: `Cutting ${segments.length} ${aspectLabel(aspectRatio).toLowerCase()} clip${segments.length === 1 ? "" : "s"}…`,
   });
 
@@ -266,10 +502,10 @@ export async function processVideoInBrowser(
     const thumbBytes = toU8(await ffmpeg.readFile(thumbName));
 
     const url = URL.createObjectURL(
-      new Blob([clipBytes.buffer as ArrayBuffer], { type: "video/mp4" })
+      new Blob([clipBytes.slice().buffer], { type: "video/mp4" })
     );
     const thumbnailUrl = URL.createObjectURL(
-      new Blob([thumbBytes.buffer as ArrayBuffer], { type: "image/jpeg" })
+      new Blob([thumbBytes.slice().buffer], { type: "image/jpeg" })
     );
 
     clips.push({
@@ -287,7 +523,7 @@ export async function processVideoInBrowser(
     await safeDelete(ffmpeg, clipName);
     await safeDelete(ffmpeg, thumbName);
 
-    const progress = 30 + Math.round(((i + 1) / segments.length) * 65);
+    const progress = 55 + Math.round(((i + 1) / segments.length) * 40);
     onProgress({
       status: "cutting",
       progress,
@@ -301,7 +537,7 @@ export async function processVideoInBrowser(
   onProgress({
     status: "complete",
     progress: 100,
-    message: `Ready — ${clips.length} ${aspectLabel(aspectRatio).toLowerCase()} clip${clips.length === 1 ? "" : "s"} (processed in your browser).`,
+    message: `Ready — ${clips.length} clip${clips.length === 1 ? "" : "s"} via ${engine}.`,
     clips,
   });
 

@@ -112,8 +112,8 @@ export function UploadZone({
           {working ? "Repurping…" : "Upload & repurp"}
         </span>
         <span className="max-w-xl text-base leading-relaxed text-[var(--ink-soft)] md:text-lg">
-          MP4, MOV, or WebM up to 200MB. Cutting runs locally with ffmpeg.wasm —
-          nothing is uploaded to a server.
+          MP4, MOV, or WebM up to 200MB. Speech is transcribed for Claude to
+          pick complete topics; clips are cut locally with ffmpeg.wasm.
         </span>
 
         <fieldset className="w-full max-w-xl">

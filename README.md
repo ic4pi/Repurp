@@ -1,57 +1,54 @@
 # repurp
 
-Upload long-form video. Get short-form clips — **entirely in your browser**.
+Upload long-form video. Get short-form clips in your browser — with **topic-aware** boundaries from Claude.
 
-**repurp** uses [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm) on the client to detect scene changes, cut contained short clips (roughly 5–45 seconds), and export them as vertical, square, landscape, or original-framed downloads. Nothing is uploaded to a processing server.
+## How clip start/end are chosen
+
+1. **Speech first (preferred):** browser extracts audio → OpenRouter **Whisper** returns a timestamped transcript → **Claude Sonnet 3.5** picks self-contained clips that:
+   - don’t start/end mid-sentence
+   - introduce what the speaker is talking about
+   - land as complete tips / stories / arguments (≈15–45s)
+2. **Visual fallback:** if `OPENROUTER_API_KEY` is missing or the API fails, ffmpeg.wasm scene detection packs visual cuts (this path *can* start mid-sentence — that’s why Claude is preferred).
+
+Cutting/framing still happens locally with ffmpeg.wasm. Only compact audio (and then transcript text) hits your Vercel API.
 
 ## Requirements
 
-- Node.js 20+ (for local development)
-- A modern desktop browser with WebAssembly (Chrome/Edge/Firefox/Safari)
+- Node.js 20+ for local dev
+- Modern desktop browser (WebAssembly)
+- **OpenRouter API key** (for smart clips)
 
 ## Setup
 
 ```bash
 npm install
+cp .env.example .env.local
+# put OPENROUTER_API_KEY=... in .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+## Deploy to Vercel
 
-## How it works
+1. Import `ic4pi/Repurp` in Vercel (Next.js defaults)
+2. Project → **Settings → Environment Variables** → add:
+   - `OPENROUTER_API_KEY` = your key from [openrouter.ai/keys](https://openrouter.ai/keys)
+3. Redeploy
+4. Optional: `OPENROUTER_CLAUDE_MODEL`, `OPENROUTER_WHISPER_MODEL`
 
-1. Pick an output frame (vertical 9:16, square 1:1, landscape 16:9, or original).
-2. Choose an MP4, MOV, or WebM (up to **200MB** for comfortable browser processing).
-3. ffmpeg.wasm loads in the page, detects scenes, and renders clips locally.
-4. Preview and download each clip from the gallery (blob URLs in your browser).
+No server ffmpeg, disk, or database required.
 
-## Deploy to Vercel (recommended)
+## Downloads
 
-This app is built for your paid Vercel account:
+After processing, each clip has a **Download** link (in-browser blob). Files are not stored on your server — refresh before downloading and they’re gone.
 
-1. Push this repo to GitHub
-2. In Vercel → **Add New Project** → import `Repurp`
-3. Framework: **Next.js** (defaults are fine — no server env vars required)
-4. Deploy
+## Limits
 
-The project sets `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` headers so the wasm worker can load cleanly.
-
-### Notes
-
-- First run downloads the ffmpeg core (~30MB) into the browser (then cached).
-- Large/long videos are slower in-browser than a server encoder; keep samples modest while testing.
-- Processing stays on-device — great for privacy and $0 incremental infra cost on Vercel.
-
-## Scripts
-
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Start the Next.js dev server |
-| `npm run build` | Production build |
-| `npm start` | Run the production server |
-| `npm run lint` | ESLint |
+- Soft ~**200MB** source videos for comfortable browser encodes
+- Desktop browsers recommended; mobile is hit-or-miss
+- OpenRouter usage is billed on their side (Whisper + Claude tokens)
 
 ## Stack
 
-- Next.js (App Router) + TypeScript + Tailwind CSS
-- `@ffmpeg/ffmpeg` + `@ffmpeg/util` for in-browser analysis, cutting, framing, and thumbnails
+- Next.js + TypeScript + Tailwind
+- `@ffmpeg/ffmpeg` (client cut/frame)
+- OpenRouter: `openai/whisper-large-v3` + `anthropic/claude-3.5-sonnet`

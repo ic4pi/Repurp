@@ -77,8 +77,8 @@ export default function HomePage() {
             repurp
           </h1>
           <p className="animate-rise-delay mt-5 max-w-lg text-lg leading-relaxed text-[var(--ink-soft)] md:text-xl">
-            Choose a video. Your browser detects moments and cuts short-form
-            clips — no server upload required.
+            Choose a video. We transcribe speech, let Claude pick self-contained
+            moments, then cut short-form clips in your browser.
           </p>
           <div className="animate-rise-delay-2 mt-8">
             <UploadZone
@@ -151,11 +151,11 @@ export default function HomePage() {
           {[
             {
               title: "Detect",
-              copy: "Scene changes mark natural boundaries inside your footage.",
+              copy: "Whisper transcribes speech; Claude Sonnet 3.5 picks complete topics—not mid-sentence cuts.",
             },
             {
               title: "Cut",
-              copy: "Clips are rendered locally with ffmpeg.wasm (≈5–45s each).",
+              copy: "Clips are rendered locally with ffmpeg.wasm (≈15–45s each when Claude edits).",
             },
             {
               title: "Frame",
