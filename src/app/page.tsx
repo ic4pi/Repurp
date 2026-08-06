@@ -54,7 +54,7 @@ export default function HomePage() {
       <header className="animate-rise flex items-center justify-between gap-4">
         <p className="brand-mark text-2xl text-[var(--ink)] md:text-3xl">repurp</p>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--ink-soft)]">
-          Long → short · in-browser
+          Long → short
         </p>
       </header>
 
@@ -77,8 +77,8 @@ export default function HomePage() {
             repurp
           </h1>
           <p className="animate-rise-delay mt-5 max-w-lg text-lg leading-relaxed text-[var(--ink-soft)] md:text-xl">
-            Choose a video. We transcribe speech, find self-contained moments,
-            then cut short-form clips in your browser.
+            Choose a video. We find the strongest moments and turn them into
+            short-form clips.
           </p>
           <div className="animate-rise-delay-2 mt-8">
             <UploadZone
@@ -102,7 +102,7 @@ export default function HomePage() {
                   aspectRatio,
                   status: "complete",
                   progress: 100,
-                  message: `Ready — ${clips.length} clip${clips.length === 1 ? "" : "s"} (processed in your browser).`,
+                  message: `Ready — ${clips.length} clip${clips.length === 1 ? "" : "s"}.`,
                   clips: toPublicClips(clips),
                 });
               }}
@@ -151,15 +151,15 @@ export default function HomePage() {
           {[
             {
               title: "Detect",
-              copy: "Audio is ripped locally, speech is transcribed, and complete topics are selected.",
+              copy: "We find natural moments and complete topics inside your footage.",
             },
             {
               title: "Cut",
-              copy: "Clips are rendered locally in your browser (≈15–45s each).",
+              copy: "Each clip is sized for short-form (about 15–45 seconds).",
             },
             {
               title: "Frame",
-              copy: "Choose vertical, square, landscape, or original framing before you start.",
+              copy: "Choose vertical, square, landscape, or original before you start.",
             },
           ].map((item) => (
             <div key={item.title}>

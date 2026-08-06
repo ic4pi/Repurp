@@ -41,7 +41,7 @@ export function UploadZone({
       return;
     }
     if (file.size > MAX_BROWSER_BYTES) {
-      onError("Keep files under 200MB for in-browser processing.");
+      onError("Keep files under 200MB.");
       return;
     }
 
@@ -106,14 +106,14 @@ export function UploadZone({
       <div className="absolute inset-x-0 top-0 h-1 progress-sheen opacity-80" />
       <div className="flex w-full flex-col items-start gap-4 px-7 py-8 text-left md:px-10 md:py-10">
         <span className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--teal)]">
-          Process in your browser
+          Drop a long-form video
         </span>
         <span className="brand-mark max-w-[14ch] text-4xl text-[var(--ink)] md:text-5xl">
           {working ? "Repurping…" : "Upload & repurp"}
         </span>
         <span className="max-w-xl text-base leading-relaxed text-[var(--ink-soft)] md:text-lg">
-          MP4, MOV, or WebM up to 200MB. We rip audio locally, transcribe speech,
-          then pick complete topics before cutting.
+          MP4, MOV, or WebM up to 200MB. We’ll find complete moments and cut
+          short clips in the frame you choose.
         </span>
 
         <fieldset className="w-full max-w-xl">

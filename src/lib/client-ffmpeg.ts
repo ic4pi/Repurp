@@ -232,7 +232,7 @@ async function resolveSegmentsWithLlm(
   onProgress({
     status: "transcribing",
     progress: 16,
-    message: "Ripping audio from the video (video stays local)…",
+    message: "Preparing audio…",
   });
 
   // Always rip audio first — Whisper never sees the video file.
@@ -380,7 +380,7 @@ export async function processVideoInBrowser(
   onProgress({
     status: "loading",
     progress: 4,
-    message: "Loading ffmpeg.wasm in your browser…",
+    message: "Getting ready…",
   });
 
   const ffmpeg = await getFFmpeg();
