@@ -2,8 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "functions": {
+    "src/app/api/transcribe/route.ts": {
+      "maxDuration": 60
+    },
     "src/app/api/analyze/route.ts": {
-      "maxDuration": 120
+      "maxDuration": 60
     }
   }
 }

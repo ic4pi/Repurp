@@ -162,19 +162,11 @@ function toU8(data: Uint8Array | string): Uint8Array {
   return data;
 }
 
-function u8ToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
-}
-
 async function extractAudioMp3(
   ffmpeg: FFmpeg,
   inputName: string
 ): Promise<Uint8Array> {
+  // Rip audio only — never upload the video file to Whisper.
   const audioName = "audio-full.mp3";
   await safeDelete(ffmpeg, audioName);
   const code = await ffmpeg.exec([
@@ -191,7 +183,7 @@ async function extractAudioMp3(
     audioName,
   ]);
   if (code !== 0) {
-    throw new Error("Could not extract audio for transcription.");
+    throw new Error("Could not rip audio from the video for transcription.");
   }
   const data = toU8(await ffmpeg.readFile(audioName));
   await safeDelete(ffmpeg, audioName);
@@ -231,7 +223,7 @@ async function sliceAudioChunk(
   return data;
 }
 
-async function resolveSegmentsWithOpenRouter(
+async function resolveSegmentsWithLlm(
   ffmpeg: FFmpeg,
   inputName: string,
   duration: number,
@@ -239,14 +231,13 @@ async function resolveSegmentsWithOpenRouter(
 ): Promise<Segment[] | null> {
   onProgress({
     status: "transcribing",
-    progress: 18,
-    message: "Extracting audio for speech transcription…",
+    progress: 16,
+    message: "Ripping audio from the video (video stays local)…",
   });
 
+  // Always rip audio first — Whisper never sees the video file.
   const fullAudio = await extractAudioMp3(ffmpeg, inputName);
   const cues: TranscriptCue[] = [];
-
-  // Prefer chunked STT so each request stays small for Vercel.
   const chunkCount = Math.max(1, Math.ceil(duration / AUDIO_CHUNK_SECONDS));
 
   for (let i = 0; i < chunkCount; i++) {
@@ -257,7 +248,7 @@ async function resolveSegmentsWithOpenRouter(
     onProgress({
       status: "transcribing",
       progress: 18 + Math.round(((i + 0.5) / chunkCount) * 22),
-      message: `Transcribing speech ${i + 1}/${chunkCount} via OpenRouter Whisper…`,
+      message: `Transcribing ripped audio ${i + 1}/${chunkCount} via Groq Whisper…`,
     });
 
     let chunkBytes =
@@ -272,7 +263,6 @@ async function resolveSegmentsWithOpenRouter(
           );
 
     if (chunkBytes.byteLength > MAX_AUDIO_CHUNK_BYTES) {
-      // Re-encode even smaller if a chunk is still heavy.
       chunkBytes = await sliceAudioChunk(
         ffmpeg,
         inputName,
@@ -282,16 +272,17 @@ async function resolveSegmentsWithOpenRouter(
       );
     }
 
-    const res = await fetch("/api/analyze", {
+    const form = new FormData();
+    form.append(
+      "audio",
+      new Blob([new Uint8Array(chunkBytes)], { type: "audio/mpeg" }),
+      `chunk-${i}.mp3`
+    );
+    form.append("timeOffset", String(start));
+
+    const res = await fetch("/api/transcribe", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "transcribe",
-        duration,
-        timeOffset: start,
-        audioBase64: u8ToBase64(chunkBytes),
-        audioFormat: "mp3",
-      }),
+      body: form,
     });
 
     const data = (await res.json()) as {
@@ -301,7 +292,7 @@ async function resolveSegmentsWithOpenRouter(
 
     if (!res.ok) {
       if (res.status === 503) return null;
-      throw new Error(data.error || "Transcription failed.");
+      throw new Error(data.error || "Groq transcription failed.");
     }
 
     cues.push(...(data.cues ?? []));
@@ -321,7 +312,6 @@ async function resolveSegmentsWithOpenRouter(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      mode: "segment",
       duration,
       cues,
     }),
@@ -410,7 +400,7 @@ export async function processVideoInBrowser(
   let engine = "visual-scenes";
 
   try {
-    segments = await resolveSegmentsWithOpenRouter(
+    segments = await resolveSegmentsWithLlm(
       ffmpeg,
       inputName,
       probe.duration,

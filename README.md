@@ -4,51 +4,53 @@ Upload long-form video. Get short-form clips in your browser — with **topic-aw
 
 ## How clip start/end are chosen
 
-1. **Speech first (preferred):** browser extracts audio → OpenRouter **Whisper** returns a timestamped transcript → **Claude Sonnet 3.5** picks self-contained clips that:
+1. **Rip audio locally** with ffmpeg.wasm (`-vn` mono 16kHz mp3). The video file never leaves the browser for transcription.
+2. Send **audio chunks only** to `/api/transcribe` → **Groq Whisper** (`whisper-large-v3-turbo`, free tier) returns timestamped speech.
+3. **Claude Sonnet 3.5** (OpenRouter) picks self-contained clips that:
    - don’t start/end mid-sentence
    - introduce what the speaker is talking about
    - land as complete tips / stories / arguments (≈15–45s)
-2. **Visual fallback:** if `OPENROUTER_API_KEY` is missing or the API fails, ffmpeg.wasm scene detection packs visual cuts (this path *can* start mid-sentence — that’s why Claude is preferred).
+4. ffmpeg.wasm cuts those ranges locally in your chosen frame.
 
-Cutting/framing still happens locally with ffmpeg.wasm. Only compact audio (and then transcript text) hits your Vercel API.
+If API keys are missing, it falls back to visual scene detection (weaker — can cut mid-sentence).
 
 ## Requirements
 
 - Node.js 20+ for local dev
 - Modern desktop browser (WebAssembly)
-- **OpenRouter API key** (for smart clips)
+- **`GROQ_API_KEY`** — free at [console.groq.com](https://console.groq.com)
+- **`OPENROUTER_API_KEY`** — for Claude at [openrouter.ai/keys](https://openrouter.ai/keys)
 
 ## Setup
 
 ```bash
 npm install
 cp .env.example .env.local
-# put OPENROUTER_API_KEY=... in .env.local
+# set GROQ_API_KEY and OPENROUTER_API_KEY
 npm run dev
 ```
 
 ## Deploy to Vercel
 
-1. Import `ic4pi/Repurp` in Vercel (Next.js defaults)
-2. Project → **Settings → Environment Variables** → add:
-   - `OPENROUTER_API_KEY` = your key from [openrouter.ai/keys](https://openrouter.ai/keys)
+1. Import `ic4pi/Repurp` (Next.js defaults)
+2. Add env vars:
+   - `GROQ_API_KEY`
+   - `OPENROUTER_API_KEY`
 3. Redeploy
-4. Optional: `OPENROUTER_CLAUDE_MODEL`, `OPENROUTER_WHISPER_MODEL`
-
-No server ffmpeg, disk, or database required.
 
 ## Downloads
 
-After processing, each clip has a **Download** link (in-browser blob). Files are not stored on your server — refresh before downloading and they’re gone.
+Each clip has a **Download** link (in-browser blob). Nothing is stored on your server.
 
 ## Limits
 
 - Soft ~**200MB** source videos for comfortable browser encodes
-- Desktop browsers recommended; mobile is hit-or-miss
-- OpenRouter usage is billed on their side (Whisper + Claude tokens)
+- Desktop browsers recommended
+- Groq free Whisper quotas apply; Claude usage is billed on OpenRouter
 
 ## Stack
 
 - Next.js + TypeScript + Tailwind
-- `@ffmpeg/ffmpeg` (client cut/frame)
-- OpenRouter: `openai/whisper-large-v3` + `anthropic/claude-3.5-sonnet`
+- `@ffmpeg/ffmpeg` — local audio rip + clip cut/frame
+- Groq `whisper-large-v3-turbo` — speech timestamps
+- OpenRouter `anthropic/claude-3.5-sonnet` — editorial clip selection

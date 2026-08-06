@@ -112,8 +112,8 @@ export function UploadZone({
           {working ? "Repurping…" : "Upload & repurp"}
         </span>
         <span className="max-w-xl text-base leading-relaxed text-[var(--ink-soft)] md:text-lg">
-          MP4, MOV, or WebM up to 200MB. Speech is transcribed for Claude to
-          pick complete topics; clips are cut locally with ffmpeg.wasm.
+          MP4, MOV, or WebM up to 200MB. We rip audio locally, transcribe with
+          Groq Whisper, then Claude picks complete topics before cutting.
         </span>
 
         <fieldset className="w-full max-w-xl">

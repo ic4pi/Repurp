@@ -151,7 +151,7 @@ export default function HomePage() {
           {[
             {
               title: "Detect",
-              copy: "Whisper transcribes speech; Claude Sonnet 3.5 picks complete topics—not mid-sentence cuts.",
+              copy: "Audio is ripped locally, Groq Whisper timestamps speech, Claude picks complete topics.",
             },
             {
               title: "Cut",

@@ -1,18 +1,12 @@
 import type { Segment } from "@/lib/segments";
+import type { TranscriptCue } from "@/lib/groq";
+
+export type { TranscriptCue };
 
 export const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
-export const OPENROUTER_STT_URL = "https://openrouter.ai/api/v1/audio/transcriptions";
 
 export const CLAUDE_MODEL =
   process.env.OPENROUTER_CLAUDE_MODEL ?? "anthropic/claude-3.5-sonnet";
-export const WHISPER_MODEL =
-  process.env.OPENROUTER_WHISPER_MODEL ?? "openai/whisper-large-v3";
-
-export type TranscriptCue = {
-  start: number;
-  end: number;
-  text: string;
-};
 
 export function requireOpenRouterKey(): string {
   const key = process.env.OPENROUTER_API_KEY;
@@ -34,53 +28,6 @@ export function openRouterHeaders(apiKey: string): HeadersInit {
   }
   headers["X-OpenRouter-Title"] = process.env.OPENROUTER_APP_NAME ?? "repurp";
   return headers;
-}
-
-export async function transcribeAudioBase64(
-  apiKey: string,
-  base64: string,
-  format: "mp3" | "wav" | "m4a" | "webm" = "mp3"
-): Promise<TranscriptCue[]> {
-  const res = await fetch(OPENROUTER_STT_URL, {
-    method: "POST",
-    headers: openRouterHeaders(apiKey),
-    body: JSON.stringify({
-      model: WHISPER_MODEL,
-      input_audio: { data: base64, format },
-      response_format: "verbose_json",
-      timestamp_granularities: ["segment"],
-    }),
-  });
-
-  const raw = (await res.json()) as {
-    error?: { message?: string } | string;
-    text?: string;
-    segments?: Array<{ start?: number; end?: number; text?: string }>;
-  };
-
-  if (!res.ok) {
-    const msg =
-      typeof raw.error === "string"
-        ? raw.error
-        : raw.error?.message || `Transcription failed (${res.status})`;
-    throw new Error(msg);
-  }
-
-  if (raw.segments?.length) {
-    return raw.segments
-      .map((seg) => ({
-        start: Number(seg.start ?? 0),
-        end: Number(seg.end ?? seg.start ?? 0),
-        text: (seg.text ?? "").trim(),
-      }))
-      .filter((seg) => seg.text.length > 0);
-  }
-
-  const text = (raw.text ?? "").trim();
-  if (!text) {
-    throw new Error("Transcription returned empty text.");
-  }
-  return [{ start: 0, end: 0, text }];
 }
 
 function extractJsonObject(text: string): unknown {
