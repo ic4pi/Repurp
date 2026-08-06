@@ -77,8 +77,8 @@ export default function HomePage() {
             repurp
           </h1>
           <p className="animate-rise-delay mt-5 max-w-lg text-lg leading-relaxed text-[var(--ink-soft)] md:text-xl">
-            Choose a video. We transcribe speech, let Claude pick self-contained
-            moments, then cut short-form clips in your browser.
+            Choose a video. We transcribe speech, find self-contained moments,
+            then cut short-form clips in your browser.
           </p>
           <div className="animate-rise-delay-2 mt-8">
             <UploadZone
@@ -151,11 +151,11 @@ export default function HomePage() {
           {[
             {
               title: "Detect",
-              copy: "Audio is ripped locally, Groq Whisper timestamps speech, Claude picks complete topics.",
+              copy: "Audio is ripped locally, speech is transcribed, and complete topics are selected.",
             },
             {
               title: "Cut",
-              copy: "Clips are rendered locally with ffmpeg.wasm (≈15–45s each when Claude edits).",
+              copy: "Clips are rendered locally in your browser (≈15–45s each).",
             },
             {
               title: "Frame",

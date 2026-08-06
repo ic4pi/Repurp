@@ -248,7 +248,7 @@ async function resolveSegmentsWithLlm(
     onProgress({
       status: "transcribing",
       progress: 18 + Math.round(((i + 0.5) / chunkCount) * 22),
-      message: `Transcribing ripped audio ${i + 1}/${chunkCount} via Groq Whisper…`,
+      message: `Transcribing ripped audio ${i + 1}/${chunkCount}…`,
     });
 
     let chunkBytes =
@@ -292,7 +292,7 @@ async function resolveSegmentsWithLlm(
 
     if (!res.ok) {
       if (res.status === 503) return null;
-      throw new Error(data.error || "Groq transcription failed.");
+      throw new Error(data.error || "Transcription failed.");
     }
 
     cues.push(...(data.cues ?? []));
@@ -305,7 +305,7 @@ async function resolveSegmentsWithLlm(
   onProgress({
     status: "editing",
     progress: 45,
-    message: "Claude Sonnet 3.5 choosing self-contained topic clips…",
+    message: "Choosing self-contained topic clips…",
   });
 
   const segmentRes = await fetch("/api/analyze", {
@@ -324,7 +324,7 @@ async function resolveSegmentsWithLlm(
 
   if (!segmentRes.ok) {
     if (segmentRes.status === 503) return null;
-    throw new Error(segmentData.error || "Claude segmentation failed.");
+    throw new Error(segmentData.error || "Topic segmentation failed.");
   }
 
   return segmentData.segments ?? null;
@@ -397,7 +397,7 @@ export async function processVideoInBrowser(
   await ffmpeg.writeFile(inputName, await fetchFile(file));
 
   let segments: Segment[] | null = null;
-  let engine = "visual-scenes";
+  let usedSpeechEditing = false;
 
   try {
     segments = await resolveSegmentsWithLlm(
@@ -407,10 +407,10 @@ export async function processVideoInBrowser(
       onProgress
     );
     if (segments?.length) {
-      engine = "claude-sonnet-3.5";
+      usedSpeechEditing = true;
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : "LLM segmentation failed.";
+    const message = err instanceof Error ? err.message : "Topic segmentation failed.";
     onProgress({
       status: "analyzing",
       progress: 22,
@@ -425,7 +425,7 @@ export async function processVideoInBrowser(
       probe.duration,
       onProgress
     );
-    engine = "visual-scenes";
+    usedSpeechEditing = false;
   }
 
   onProgress({
